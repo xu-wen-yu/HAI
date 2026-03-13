@@ -1,8 +1,12 @@
 # HAI学伴系统 (Human with AI)
 
+[![GitHub](https://img.shields.io/badge/GitHub-Repository-blue?logo=github)](https://github.com/xu-wen-yu/HAI)
+
 ## 🎯 项目简介
 
 HAI学伴是一个智能学习伙伴系统，以聊天系统的形式构建学习者与AI学伴之间的互动。学伴可以解答学习者的专业问题，提供24小时不间断的学习支持。
+
+**GitHub 仓库**: https://github.com/xu-wen-yu/HAI
 
 ## 🌟 核心特色
 
