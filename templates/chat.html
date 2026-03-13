@@ -1,0 +1,386 @@
+{% extends "base.html" %}
+
+{% block title %}聊天 - HAI学伴{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8">
+        <!-- 聊天区域 -->
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-comments"></i> 与HAI学伴对话
+                    <span class="anonymous-badge float-end">
+                        <i class="fas fa-user-secret"></i> 匿名模式
+                    </span>
+                </h5>
+            </div>
+            <div class="card-body" style="height: 500px; overflow-y: auto;" id="chatMessages">
+                <div class="text-center text-muted py-5">
+                    <i class="fas fa-robot fa-3x mb-3"></i>
+                    <h5>欢迎使用HAI学伴！</h5>
+                    <p>我是你的智能学习伙伴，可以帮你解答专业问题。</p>
+                    <p class="small">我们可以保持匿名，专注于学习内容。</p>
+                </div>
+            </div>
+            <div class="card-footer">
+                <form id="chatForm" class="d-flex">
+                    <input type="text" class="form-control me-2" id="messageInput" 
+                           placeholder="输入你的学习问题..." required>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-paper-plane"></i> 发送
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <!-- 用户信息 -->
+        <div class="card mb-3">
+            <div class="card-body text-center">
+                <div class="mb-3">
+                    <i class="fas fa-user-circle fa-3x text-primary"></i>
+                </div>
+                <h5>{{ session.username }}</h5>
+                <p class="text-muted mb-2">
+                    {% if session.user_type == 'paid' %}
+                        <span class="badge bg-warning">付费学伴</span>
+                    {% else %}
+                        <span class="badge merit-badge">免费学伴</span>
+                    {% endif %}
+                </p>
+                <div class="row text-center">
+                    <div class="col-6">
+                        <div class="merit-badge">
+                            <div id="userCredits">0</div>
+                            <small>功德积分</small>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="anonymous-badge">
+                            <div id="totalPoints">0</div>
+                            <small>总积分</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 功能菜单 -->
+        <div class="card mb-3">
+            <div class="card-body">
+                <h6 class="card-title"><i class="fas fa-menu"></i> 功能菜单</h6>
+                <div class="d-grid gap-2">
+                    <button class="btn btn-outline-primary btn-sm" onclick="loadHistory()">
+                        <i class="fas fa-history"></i> 查看历史记录
+                    </button>
+                    <button class="btn btn-outline-success btn-sm" onclick="showKnowledge()">
+                        <i class="fas fa-book"></i> 知识库
+                    </button>
+                    <button class="btn btn-outline-info btn-sm" onclick="clearChat()">
+                        <i class="fas fa-eraser"></i> 清空对话
+                    </button>
+                    <a class="btn btn-outline-success btn-sm" href="/learner/dashboard">
+                        <i class="fas fa-graduation-cap"></i> 学习者中心
+                    </a>
+                    <button class="btn btn-outline-danger btn-sm" onclick="logout()">
+                        <i class="fas fa-sign-out-alt"></i> 退出登录
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 使用提示 -->
+        <div class="card">
+            <div class="card-body">
+                <h6 class="card-title"><i class="fas fa-lightbulb"></i> 使用提示</h6>
+                <ul class="list-unstyled small">
+                    <li><i class="fas fa-check text-success"></i> 保持匿名，专注学习</li>
+                    <li><i class="fas fa-check text-success"></i> 免费用户可积累功德积分</li>
+                    <li><i class="fas fa-check text-success"></i> 付费用户享受专业服务</li>
+                    <li><i class="fas fa-check text-success"></i> AI数字分身提供24小时服务</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 历史记录模态框 -->
+<div class="modal fade" id="historyModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-history"></i> 对话历史</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="historyContent" style="max-height: 400px; overflow-y: auto;">
+                <div class="text-center">
+                    <div class="loading-spinner"></div>
+                    <p class="mt-2">加载中...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 知识库模态框 -->
+<div class="modal fade" id="knowledgeModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-book"></i> 知识库</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <input type="text" class="form-control" id="knowledgeSearch" placeholder="搜索知识库...">
+                </div>
+                <div id="knowledgeContent">
+                    <div class="text-center">
+                        <i class="fas fa-book fa-3x text-muted mb-3"></i>
+                        <p>知识库正在建设中...</p>
+                        <p class="small text-muted">AI学伴会基于知识库内容为你提供更好的答案</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let conversationHistory = [];
+
+$(document).ready(function() {
+    loadUserInfo();
+    
+    // 聊天表单提交
+    $('#chatForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        const message = $('#messageInput').val().trim();
+        if (!message) return;
+        
+        // 添加用户消息到聊天界面
+        addMessageToChat('user', message);
+        $('#messageInput').val('');
+        
+        // 显示加载状态
+        addLoadingMessage();
+        
+        // 发送消息到后端
+        $.ajax({
+            url: '/chat',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ message: message }),
+            success: function(response) {
+                removeLoadingMessage();
+                if (response.success) {
+                    addMessageToChat('ai', response.response);
+                    // 更新用户信息
+                    loadUserInfo();
+                } else {
+                    addMessageToChat('ai', '抱歉，我遇到了一些问题。请重试。');
+                }
+            },
+            error: function() {
+                removeLoadingMessage();
+                addMessageToChat('ai', '抱歉，网络连接出现问题。请检查网络后重试。');
+            }
+        });
+    });
+});
+
+function addMessageToChat(sender, message) {
+    const chatMessages = $('#chatMessages');
+    const messageHtml = `
+        <div class="mb-3 fade-in">
+            <div class="d-flex ${sender === 'user' ? 'justify-content-end' : 'justify-content-start'}">
+                <div class="message-bubble ${sender === 'user' ? 'bg-primary text-white' : 'bg-light'}">
+                    <div class="d-flex align-items-center mb-1">
+                        <i class="fas fa-${sender === 'user' ? 'user' : 'robot'} me-2"></i>
+                        <small class="${sender === 'user' ? 'text-white-50' : 'text-muted'}">
+                            ${sender === 'user' ? '你' : 'HAI学伴'}
+                        </small>
+                    </div>
+                    <div>${message}</div>
+                    <small class="${sender === 'user' ? 'text-white-50' : 'text-muted'} d-block mt-1">
+                        ${new Date().toLocaleTimeString()}
+                    </small>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    chatMessages.append(messageHtml);
+    chatMessages.scrollTop(chatMessages[0].scrollHeight);
+    
+    // 保存到历史记录
+    conversationHistory.push({
+        sender: sender,
+        message: message,
+        timestamp: new Date()
+    });
+}
+
+function addLoadingMessage() {
+    const chatMessages = $('#chatMessages');
+    const loadingHtml = `
+        <div class="mb-3" id="loadingMessage">
+            <div class="d-flex justify-content-start">
+                <div class="message-bubble bg-light">
+                    <div class="d-flex align-items-center">
+                        <i class="fas fa-robot me-2"></i>
+                        <div class="loading-spinner me-2"></div>
+                        <small class="text-muted">思考中...</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    chatMessages.append(loadingHtml);
+    chatMessages.scrollTop(chatMessages[0].scrollHeight);
+}
+
+function removeLoadingMessage() {
+    $('#loadingMessage').remove();
+}
+
+function loadUserInfo() {
+    $.ajax({
+        url: '/profile',
+        method: 'GET',
+        success: function(response) {
+            if (response.success) {
+                $('#userCredits').text(response.credits);
+                $('#totalPoints').text(response.total_points);
+            }
+        }
+    });
+}
+
+function loadHistory() {
+    $.ajax({
+        url: '/history',
+        method: 'GET',
+        success: function(response) {
+            if (response.success) {
+                displayHistory(response.history);
+                const modal = new bootstrap.Modal(document.getElementById('historyModal'));
+                modal.show();
+            }
+        }
+    });
+}
+
+function displayHistory(history) {
+    const historyContent = $('#historyContent');
+    
+    if (history.length === 0) {
+        historyContent.html(`
+            <div class="text-center text-muted">
+                <i class="fas fa-comments fa-3x mb-3"></i>
+                <p>还没有对话记录</p>
+            </div>
+        `);
+        return;
+    }
+    
+    let historyHtml = '';
+    history.forEach(item => {
+        historyHtml += `
+            <div class="card mb-3">
+                <div class="card-body">
+                    <div class="mb-2">
+                        <strong><i class="fas fa-user text-primary"></i> 你:</strong>
+                        <div class="ms-4">${item[0]}</div>
+                    </div>
+                    <div class="mb-2">
+                        <strong><i class="fas fa-robot text-success"></i> HAI学伴:</strong>
+                        <div class="ms-4">${item[1]}</div>
+                    </div>
+                    <small class="text-muted">
+                        <i class="fas fa-clock"></i> ${new Date(item[2]).toLocaleString()}
+                    </small>
+                </div>
+            </div>
+        `;
+    });
+    
+    historyContent.html(historyHtml);
+}
+
+function showKnowledge() {
+    const modal = new bootstrap.Modal(document.getElementById('knowledgeModal'));
+    modal.show();
+}
+
+function clearChat() {
+    if (confirm('确定要清空当前对话吗？')) {
+        $('#chatMessages').html(`
+            <div class="text-center text-muted py-5">
+                <i class="fas fa-robot fa-3x mb-3"></i>
+                <h5>对话已清空</h5>
+                <p>开始新的学习对话吧！</p>
+            </div>
+        `);
+        conversationHistory = [];
+    }
+}
+
+function logout() {
+    if (confirm('确定要退出登录吗？')) {
+        $.ajax({
+            url: '/logout',
+            method: 'GET',
+            success: function() {
+                window.location.href = '/';
+            }
+        });
+    }
+}
+
+// 添加自定义样式
+const style = `
+<style>
+.message-bubble {
+    max-width: 70%;
+    padding: 12px 16px;
+    border-radius: 18px;
+    word-wrap: break-word;
+}
+
+.bg-primary {
+    background: linear-gradient(135deg, var(--primary-color), #5a8fd8) !important;
+}
+
+.bg-light {
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef) !important;
+}
+
+#chatMessages {
+    scroll-behavior: smooth;
+}
+
+#chatMessages::-webkit-scrollbar {
+    width: 6px;
+}
+
+#chatMessages::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+}
+
+#chatMessages::-webkit-scrollbar-thumb {
+    background: var(--primary-color);
+    border-radius: 3px;
+}
+</style>`;
+
+$('head').append(style);
+</script>
+{% endblock %}
