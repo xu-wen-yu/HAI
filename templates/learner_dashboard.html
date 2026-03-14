@@ -50,6 +50,12 @@
             border-radius: 15px;
             padding: 20px;
         }
+        .learner-avatar {
+            width: 80px;
+            height: 80px;
+            object-fit: cover;
+            border: 3px solid #e9ecef;
+        }
     </style>
 </head>
 <body class="bg-light">
@@ -79,11 +85,25 @@
                 <div class="card dashboard-card mb-4">
                     <div class="card-body text-center">
                         <div class="mb-3">
-                            <img src="https://via.placeholder.com/80x80/007bff/ffffff?text=学习者" 
-                                 class="rounded-circle" alt="头像">
+                            <img src="/head.png"
+                                 class="rounded-circle learner-avatar" alt="头像">
                         </div>
                         <h5 id="learnerName">学习者</h5>
-                        <p class="text-muted" id="learnerGrade">年级</p>
+                        <div class="mb-2">
+                            <label class="form-label small text-muted mb-1" for="learnerGrade">年级</label>
+                            <select class="form-select form-select-sm" id="learnerGrade">
+                                <option value="">请选择年级</option>
+                                <option value="大一">大一</option>
+                                <option value="大二">大二</option>
+                                <option value="大三">大三</option>
+                                <option value="大四">大四</option>
+                                <option value="研一">研一</option>
+                                <option value="研二">研二</option>
+                            </select>
+                            <button class="btn btn-outline-primary btn-sm mt-2 w-100" onclick="saveGradeLevel()">
+                                <i class="bi bi-check2-circle"></i> 保存年级
+                            </button>
+                        </div>
                         <div class="study-stats mt-3">
                             <div class="row text-center">
                                 <div class="col-6">
@@ -323,6 +343,8 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        let currentLearnerProfile = null;
+
         // 页面加载时获取数据
         document.addEventListener('DOMContentLoaded', function() {
             loadLearnerData();
@@ -350,9 +372,53 @@
         // 更新个人资料显示
         function updateProfileDisplay(data) {
             if (data.learner_profile) {
+                currentLearnerProfile = data.learner_profile;
                 document.getElementById('learnerName').textContent = data.learner_profile.full_name || '学习者';
-                document.getElementById('learnerGrade').textContent = data.learner_profile.grade_level || '';
+                document.getElementById('learnerGrade').value = data.learner_profile.grade_level || '';
                 document.getElementById('totalStudyHours').textContent = data.learner_profile.weekly_study_hours || 0;
+            }
+        }
+
+        // 保存年级
+        async function saveGradeLevel() {
+            const gradeLevel = document.getElementById('learnerGrade').value;
+            if (!gradeLevel) {
+                alert('请先选择年级');
+                return;
+            }
+
+            const profile = currentLearnerProfile || {};
+            const payload = {
+                full_name: profile.full_name || document.getElementById('learnerName').textContent || '学习者',
+                age: profile.age,
+                grade_level: gradeLevel,
+                learning_goals: profile.learning_goals || [],
+                preferred_subjects: profile.preferred_subjects || [],
+                learning_style: profile.learning_style || '',
+                weekly_study_hours: profile.weekly_study_hours || 0
+            };
+
+            try {
+                const response = await fetch('/learner/profile/update', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                if (result.success) {
+                    currentLearnerProfile = {
+                        ...profile,
+                        grade_level: gradeLevel
+                    };
+                    alert('年级更新成功！');
+                } else {
+                    alert('更新失败: ' + result.message);
+                }
+            } catch (error) {
+                console.error('更新年级失败:', error);
+                alert('更新失败，请重试');
             }
         }
 

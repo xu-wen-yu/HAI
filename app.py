@@ -1,15 +1,20 @@
-from flask import Flask, render_template, request, jsonify, session, redirect
+from flask import Flask, render_template, request, jsonify, session, redirect, send_from_directory
 import sqlite3
 import hashlib
 import secrets
 from datetime import datetime
 import json
 import os
+from pathlib import Path
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 import openai
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
+from rag import RAGKnowledgeBase, ALLOWED_EXTENSIONS as RAG_ALLOWED_EXT
+
+MAX_UPLOAD_SIZE = 20 * 1024 * 1024  # 20 MB
 
 app = Flask(__name__)
 app.secret_key = secrets.token_hex(16)
@@ -159,12 +164,8 @@ class HAILearningCompanion:
         
         return relevant_knowledge
     
-    def generate_response(self, user_message, user_type='free'):
-        """生成AI学伴的回复"""
-        # 查找相关知识
-        relevant_knowledge = self.find_relevant_knowledge(user_message)
-        
-        # 构建提示词
+    def generate_response(self, user_message, user_type='free', rag_context=''):
+        """生成AI学伴的回复。rag_context 由 LangChain RAG 检索后传入。"""
         system_prompt = """你是一个专业的学习伙伴，名字叫"HAI学伴"。你的目标是帮助学习者解决专业问题。
         
 规则：
@@ -174,20 +175,26 @@ class HAILearningCompanion:
 4. 对于付费用户，提供更深入、更个性化的指导
 5. 使用鼓励和友好的语气
 """
-        
-        if relevant_knowledge:
-            knowledge_context = "\n".join([f"主题: {topic}\n内容: {content}" for topic, content in relevant_knowledge])
-            system_prompt += f"\n\n相关知识库内容：\n{knowledge_context}"
-        
+
+        if rag_context:
+            # 优先使用 LangChain RAG 检索到的外部知识
+            system_prompt += f"\n\n以下是从知识库文档中检索到的相关内容，请优先基于此作答：\n{rag_context}"
+        else:
+            # 回退到 TF-IDF 内置知识库
+            relevant_knowledge = self.find_relevant_knowledge(user_message)
+            if relevant_knowledge:
+                knowledge_context = "\n".join(
+                    [f"主题: {topic}\n内容: {content}" for topic, content in relevant_knowledge]
+                )
+                system_prompt += f"\n\n相关知识库内容：\n{knowledge_context}"
+
         # 根据用户类型调整回复深度
         if user_type == 'paid':
             system_prompt += "\n\n付费用户专享：提供更详细、结构化的回答，包含更多例子和深入解释。"
         else:
             system_prompt += "\n\n免费用户：提供简洁但有帮助的回答。"
-        
-        # 这里使用OpenAI API（需要配置API密钥）
+
         try:
-            # 模拟AI回复（实际使用时替换为真实的OpenAI API调用）
             response = self.simulate_ai_response(user_message, system_prompt)
             return response
         except Exception as e:
@@ -210,6 +217,9 @@ class HAILearningCompanion:
 
 # 初始化AI学伴
 ai_companion = HAILearningCompanion()
+
+# 初始化 LangChain RAG 知识库（首次启动会下载嵌入模型，约 120 MB）
+rag_kb = RAGKnowledgeBase()
 
 @app.route('/')
 def index():
@@ -291,29 +301,53 @@ def register():
 def chat():
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': '请先登录'})
-    
+
     data = request.json
-    message = data.get('message')
-    
-    # 生成AI回复
-    response = ai_companion.generate_response(message, session.get('user_type', 'free'))
-    
+    message = (data.get('message') or '').strip()
+    use_rag = bool(data.get('use_rag', False))
+
+    # LangChain RAG 检索
+    sources: list = []
+    rag_found = False
+    rag_context = ''
+    if use_rag and rag_kb.is_available:
+        docs, sources = rag_kb.query(message)
+        if docs:
+            rag_found = True
+            rag_context = '\n\n---\n\n'.join(doc.page_content for doc in docs)
+
+    # 生成 AI 回复
+    response = ai_companion.generate_response(
+        message, session.get('user_type', 'free'), rag_context
+    )
+
     # 保存对话记录
     conn = sqlite3.connect('hai_learn.db')
     c = conn.cursor()
-    c.execute("INSERT INTO conversations (user_id, message, response) VALUES (?, ?, ?)",
-              (session['user_id'], message, response))
-    
+    c.execute(
+        'INSERT INTO conversations (user_id, message, response) VALUES (?, ?, ?)',
+        (session['user_id'], message, response),
+    )
+
     # 免费用户获得功德积分
     if session.get('user_type') == 'free':
-        c.execute("UPDATE users SET credits = credits + 1 WHERE id = ?", (session['user_id'],))
-        c.execute("INSERT INTO merit_points (user_id, points, reason) VALUES (?, ?, ?)",
-                  (session['user_id'], 1, "免费帮助学习者"))
-    
+        c.execute('UPDATE users SET credits = credits + 1 WHERE id = ?', (session['user_id'],))
+        c.execute(
+            'INSERT INTO merit_points (user_id, points, reason) VALUES (?, ?, ?)',
+            (session['user_id'], 1, '免费帮助学习者'),
+        )
+
     conn.commit()
     conn.close()
-    
-    return jsonify({'success': True, 'response': response})
+
+    return jsonify({
+        'success': True,
+        'response': response,
+        'sources': sources,
+        'rag_used': use_rag,
+        'rag_found': rag_found,
+        'rag_available': rag_kb.is_available,
+    })
 
 @app.route('/history')
 def history():
@@ -424,6 +458,12 @@ def learner_dashboard():
         return redirect('/login')
     
     return render_template('learner_dashboard.html')
+
+
+@app.route('/head.png')
+def head_image():
+    """提供学习者头像图片。"""
+    return send_from_directory(app.root_path, 'head.png')
 
 # 学习者账户管理功能
 @app.route('/learner/profile/update', methods=['POST'])
@@ -667,6 +707,98 @@ def update_learning_progress():
 def logout():
     session.clear()
     return jsonify({'success': True})
+
+
+# ======================================================================
+# 知识库管理页面
+# ======================================================================
+
+@app.route('/knowledge')
+def knowledge_page():
+    if 'user_id' not in session:
+        return redirect('/')
+    return render_template('knowledge.html')
+
+
+# ======================================================================
+# RAG 文档 API
+# ======================================================================
+
+@app.route('/rag/status')
+def rag_status():
+    """返回 RAG 是否可用及文档数量。"""
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': '请先登录'})
+    doc_count = len(rag_kb.list_documents()) if rag_kb.is_available else 0
+    return jsonify({
+        'success': True,
+        'available': rag_kb.is_available,
+        'doc_count': doc_count,
+    })
+
+
+@app.route('/rag/upload', methods=['POST'])
+def rag_upload():
+    """上传文档到知识库。支持 PDF / Word / Markdown / TXT，最大 20 MB。"""
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': '请先登录'})
+    if not rag_kb.is_available:
+        return jsonify({'success': False, 'message': 'RAG 组件未就绪，请确认依赖已安装'})
+
+    if 'file' not in request.files:
+        return jsonify({'success': False, 'message': '未选择文件'})
+    file = request.files['file']
+    if not file.filename:
+        return jsonify({'success': False, 'message': '未选择文件'})
+
+    original_name = file.filename
+    ext = Path(original_name).suffix.lower()
+    if ext not in RAG_ALLOWED_EXT:
+        return jsonify({'success': False,
+                        'message': f'不支持 {ext} 格式，请上传 PDF / Word / Markdown / TXT'})
+
+    # 检查文件大小
+    file.seek(0, 2)
+    size = file.tell()
+    file.seek(0)
+    if size > MAX_UPLOAD_SIZE:
+        return jsonify({'success': False, 'message': '文件过大，最大支持 20 MB'})
+
+    # 生成唯一文件名，防止覆盖
+    safe_name = secure_filename(original_name)
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    save_name = f'{timestamp}_{safe_name}'
+    file_path = os.path.join(rag_kb.files_dir, save_name)
+    file.save(file_path)
+
+    success, msg, doc_id = rag_kb.add_document(file_path, original_name, session['user_id'])
+    if not success:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        return jsonify({'success': False, 'message': msg})
+
+    return jsonify({'success': True, 'message': msg, 'doc_id': doc_id})
+
+
+@app.route('/rag/documents')
+def rag_documents():
+    """列出知识库中所有文档。"""
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': '请先登录'})
+    docs = rag_kb.list_documents() if rag_kb.is_available else []
+    return jsonify({'success': True, 'documents': docs})
+
+
+@app.route('/rag/document/<int:doc_id>', methods=['DELETE'])
+def rag_delete_document(doc_id):
+    """从知识库删除指定文档（同时删除物理文件并重建向量库）。"""
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': '请先登录'})
+    if not rag_kb.is_available:
+        return jsonify({'success': False, 'message': 'RAG 组件未就绪'})
+    success, msg = rag_kb.delete_document(doc_id)
+    return jsonify({'success': success, 'message': msg})
+
 
 if __name__ == '__main__':
     init_db()
