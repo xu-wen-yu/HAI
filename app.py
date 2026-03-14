@@ -1,10 +1,11 @@
-from flask import Flask, render_template, request, jsonify, session, redirect
+from flask import Flask, render_template, request, jsonify, session, redirect, send_from_directory
 import sqlite3
 import hashlib
 import secrets
 from datetime import datetime
 import json
 import os
+from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 import openai
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -13,6 +14,14 @@ import numpy as np
 
 app = Flask(__name__)
 app.secret_key = secrets.token_hex(16)
+
+# 文件上传配置
+UPLOAD_FOLDER = 'uploads/avatars'
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+# 确保上传目录存在
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # 数据库初始化
 def init_db():
@@ -27,6 +36,7 @@ def init_db():
                   user_type TEXT DEFAULT 'free',  -- free, paid, learner
                   user_role TEXT DEFAULT 'user',   -- user, learner, tutor
                   credits INTEGER DEFAULT 0,
+                  avatar_url TEXT,
                   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
     
     # 学习者档案表
@@ -116,6 +126,19 @@ def init_db():
                   timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                   FOREIGN KEY (user_id) REFERENCES users (id))''')
     
+    # AI API配置表
+    c.execute('''CREATE TABLE IF NOT EXISTS api_configs
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  user_id INTEGER UNIQUE,
+                  api_provider TEXT DEFAULT 'openai',
+                  api_key TEXT,
+                  base_url TEXT,
+                  model_name TEXT DEFAULT 'gpt-3.5-turbo',
+                  is_active BOOLEAN DEFAULT FALSE,
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  FOREIGN KEY (user_id) REFERENCES users (id))''')
+    
     conn.commit()
     conn.close()
 
@@ -159,14 +182,14 @@ class HAILearningCompanion:
         
         return relevant_knowledge
     
-    def generate_response(self, user_message, user_type='free'):
+    def generate_response(self, user_message, user_type='free', api_config=None):
         """生成AI学伴的回复"""
         # 查找相关知识
         relevant_knowledge = self.find_relevant_knowledge(user_message)
         
         # 构建提示词
         system_prompt = """你是一个专业的学习伙伴，名字叫"HAI学伴"。你的目标是帮助学习者解决专业问题。
-        
+
 规则：
 1. 你不能透露自己的AI身份，也不能询问学习者的身份信息
 2. 保持匿名性，专注于学习内容
@@ -185,13 +208,40 @@ class HAILearningCompanion:
         else:
             system_prompt += "\n\n免费用户：提供简洁但有帮助的回答。"
         
-        # 这里使用OpenAI API（需要配置API密钥）
-        try:
-            # 模拟AI回复（实际使用时替换为真实的OpenAI API调用）
-            response = self.simulate_ai_response(user_message, system_prompt)
-            return response
-        except Exception as e:
-            return f"作为你的学习伙伴，我建议你：{user_message}。这是一个很好的问题，让我们继续深入探讨！"
+        # 如果用户配置了API，使用用户的API
+        if api_config and api_config.get('is_active') and api_config.get('api_key'):
+            try:
+                return self.call_user_api(user_message, system_prompt, api_config)
+            except Exception as e:
+                return f"API调用失败: {str(e)}。使用备用回复：{self.simulate_ai_response(user_message, system_prompt)}"
+        
+        # 使用默认模拟回复
+        return self.simulate_ai_response(user_message, system_prompt)
+    
+    def call_user_api(self, user_message, system_prompt, api_config):
+        """调用用户配置的API"""
+        from openai import OpenAI
+        
+        api_key = api_config.get('api_key')
+        base_url = api_config.get('base_url')
+        model_name = api_config.get('model_name', 'gpt-3.5-turbo')
+        
+        client = OpenAI(
+            api_key=api_key,
+            base_url=base_url if base_url else None
+        )
+        
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
+            ],
+            temperature=0.7,
+            max_tokens=1000
+        )
+        
+        return response.choices[0].message.content
     
     def simulate_ai_response(self, user_message, system_prompt):
         """模拟AI回复（演示用）"""
@@ -287,16 +337,42 @@ def register():
         conn.close()
         return jsonify({'success': False, 'message': f'注册失败: {str(e)}'})
 
+@app.route('/chat')
+def chat_page():
+    """显示聊天页面"""
+    if 'user_id' not in session:
+        return redirect('/')
+    return render_template('chat.html')
+
 @app.route('/chat', methods=['POST'])
 def chat():
+    """处理聊天消息"""
     if 'user_id' not in session:
         return jsonify({'success': False, 'message': '请先登录'})
     
     data = request.json
     message = data.get('message')
     
+    # 获取用户的API配置
+    conn = sqlite3.connect('hai_learn.db')
+    c = conn.cursor()
+    c.execute("SELECT api_provider, api_key, base_url, model_name, is_active FROM api_configs WHERE user_id = ?", 
+              (session['user_id'],))
+    api_config_data = c.fetchone()
+    conn.close()
+    
+    api_config = None
+    if api_config_data:
+        api_config = {
+            'api_provider': api_config_data[0],
+            'api_key': api_config_data[1],
+            'base_url': api_config_data[2],
+            'model_name': api_config_data[3],
+            'is_active': api_config_data[4]
+        }
+    
     # 生成AI回复
-    response = ai_companion.generate_response(message, session.get('user_type', 'free'))
+    response = ai_companion.generate_response(message, session.get('user_type', 'free'), api_config)
     
     # 保存对话记录
     conn = sqlite3.connect('hai_learn.db')
@@ -663,10 +739,193 @@ def update_learning_progress():
         conn.close()
         return jsonify({'success': False, 'message': f'更新失败: {str(e)}'})
 
+# AI API配置管理
+@app.route('/api/config/get')
+def get_api_config():
+    """获取用户的API配置"""
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': '请先登录'})
+    
+    conn = sqlite3.connect('hai_learn.db')
+    c = conn.cursor()
+    c.execute("""
+        SELECT api_provider, api_key, base_url, model_name, is_active 
+        FROM api_configs WHERE user_id = ?
+    """, (session['user_id'],))
+    config = c.fetchone()
+    conn.close()
+    
+    if config:
+        return jsonify({
+            'success': True,
+            'config': {
+                'api_provider': config[0],
+                'api_key': '***' if config[1] else '',
+                'base_url': config[2],
+                'model_name': config[3],
+                'is_active': bool(config[4])
+            }
+        })
+    else:
+        return jsonify({
+            'success': True,
+            'config': {
+                'api_provider': 'openai',
+                'api_key': '',
+                'base_url': '',
+                'model_name': 'gpt-3.5-turbo',
+                'is_active': False
+            }
+        })
+
+@app.route('/api/config/save', methods=['POST'])
+def save_api_config():
+    """保存用户的API配置"""
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': '请先登录'})
+    
+    data = request.json
+    conn = sqlite3.connect('hai_learn.db')
+    c = conn.cursor()
+    
+    try:
+        api_provider = data.get('api_provider', 'openai')
+        api_key = data.get('api_key', '')
+        base_url = data.get('base_url', '')
+        model_name = data.get('model_name', 'gpt-3.5-turbo')
+        is_active = data.get('is_active', False)
+        
+        # 检查是否已存在配置
+        c.execute("SELECT id FROM api_configs WHERE user_id = ?", (session['user_id'],))
+        existing = c.fetchone()
+        
+        if existing:
+            # 更新现有配置
+            if api_key:
+                c.execute("""
+                    UPDATE api_configs 
+                    SET api_provider = ?, api_key = ?, base_url = ?, model_name = ?, 
+                        is_active = ?, updated_at = ?
+                    WHERE user_id = ?
+                """, (api_provider, api_key, base_url, model_name, is_active, datetime.now(), session['user_id']))
+            else:
+                # 如果API key为空，不更新api_key字段
+                c.execute("""
+                    UPDATE api_configs 
+                    SET api_provider = ?, base_url = ?, model_name = ?, 
+                        is_active = ?, updated_at = ?
+                    WHERE user_id = ?
+                """, (api_provider, base_url, model_name, is_active, datetime.now(), session['user_id']))
+        else:
+            # 创建新配置
+            c.execute("""
+                INSERT INTO api_configs 
+                (user_id, api_provider, api_key, base_url, model_name, is_active)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (session['user_id'], api_provider, api_key, base_url, model_name, is_active))
+        
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True, 'message': 'API配置保存成功'})
+    except Exception as e:
+        conn.close()
+        return jsonify({'success': False, 'message': f'保存失败: {str(e)}'})
+
+@app.route('/api/config/test', methods=['POST'])
+def test_api_config():
+    """测试API配置是否有效"""
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': '请先登录'})
+    
+    data = request.json
+    api_key = data.get('api_key', '')
+    base_url = data.get('base_url', '')
+    model_name = data.get('model_name', 'gpt-3.5-turbo')
+    
+    if not api_key:
+        return jsonify({'success': False, 'message': '请提供API Key'})
+    
+    try:
+        from openai import OpenAI
+        client = OpenAI(
+            api_key=api_key,
+            base_url=base_url if base_url else None
+        )
+        
+        # 发送一个简单的测试消息
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=[{"role": "user", "content": "你好"}],
+            max_tokens=10
+        )
+        
+        return jsonify({'success': True, 'message': 'API连接测试成功！'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'API连接失败: {str(e)}'})
+
 @app.route('/logout')
 def logout():
     session.clear()
     return jsonify({'success': True})
+
+# 头像上传和获取
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+@app.route('/upload/avatar', methods=['POST'])
+def upload_avatar():
+    """上传用户头像"""
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': '请先登录'})
+    
+    if 'avatar' not in request.files:
+        return jsonify({'success': False, 'message': '没有找到文件'})
+    
+    file = request.files['avatar']
+    
+    if file.filename == '':
+        return jsonify({'success': False, 'message': '文件名不能为空'})
+    
+    if file and allowed_file(file.filename):
+        try:
+            filename = secure_filename(f"{session['user_id']}_{datetime.now().strftime('%Y%m%d%H%M%S')}_{file.filename}")
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(filepath)
+            
+            # 更新数据库
+            conn = sqlite3.connect('hai_learn.db')
+            c = conn.cursor()
+            c.execute("UPDATE users SET avatar_url = ? WHERE id = ?", (filename, session['user_id']))
+            conn.commit()
+            conn.close()
+            
+            return jsonify({'success': True, 'filename': filename, 'message': '头像上传成功'})
+        except Exception as e:
+            return jsonify({'success': False, 'message': f'上传失败: {str(e)}'})
+    else:
+        return jsonify({'success': False, 'message': '不支持的文件格式'})
+
+@app.route('/uploads/avatars/<filename>')
+def get_avatar(filename):
+    """获取用户头像"""
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
+@app.route('/api/avatar/get')
+def get_user_avatar():
+    """获取当前用户的头像URL"""
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': '请先登录'})
+    
+    conn = sqlite3.connect('hai_learn.db')
+    c = conn.cursor()
+    c.execute("SELECT avatar_url FROM users WHERE id = ?", (session['user_id'],))
+    result = c.fetchone()
+    conn.close()
+    
+    if result and result[0]:
+        return jsonify({'success': True, 'avatar_url': f'/uploads/avatars/{result[0]}', 'has_avatar': True})
+    else:
+        return jsonify({'success': True, 'avatar_url': '', 'has_avatar': False})
 
 if __name__ == '__main__':
     init_db()

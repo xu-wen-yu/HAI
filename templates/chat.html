@@ -15,6 +15,11 @@
                     </span>
                 </h5>
             </div>
+            <div class="card-body p-2" style="background: #f8f9fa;">
+                <div id="apiStatus" class="alert alert-info mb-0 small" role="alert">
+                    <span id="apiStatusText">使用默认回复模式。前往学习者中心配置API以获得更好的体验。</span>
+                </div>
+            </div>
             <div class="card-body" style="height: 500px; overflow-y: auto;" id="chatMessages">
                 <div class="text-center text-muted py-5">
                     <i class="fas fa-robot fa-3x mb-3"></i>
@@ -40,7 +45,8 @@
         <div class="card mb-3">
             <div class="card-body text-center">
                 <div class="mb-3">
-                    <i class="fas fa-user-circle fa-3x text-primary"></i>
+                    <img id="chatAvatar" src="https://via.placeholder.com/100x100/007bff/ffffff?text=用户" 
+                         class="rounded-circle" alt="头像" style="width: 100px; height: 100px; object-fit: cover;">
                 </div>
                 <h5>{{ session.username }}</h5>
                 <p class="text-muted mb-2">
@@ -155,6 +161,8 @@ let conversationHistory = [];
 
 $(document).ready(function() {
     loadUserInfo();
+    checkApiStatus();
+    loadChatAvatar();
     
     // 聊天表单提交
     $('#chatForm').on('submit', function(e) {
@@ -193,6 +201,40 @@ $(document).ready(function() {
         });
     });
 });
+
+function checkApiStatus() {
+    $.ajax({
+        url: '/api/config/get',
+        method: 'GET',
+        success: function(response) {
+            if (response.success) {
+                const config = response.config;
+                const apiStatus = $('#apiStatus');
+                const apiStatusText = $('#apiStatusText');
+                
+                if (config.is_active && config.api_key) {
+                    apiStatus.removeClass('alert-info').addClass('alert-success');
+                    apiStatusText.html(`
+                        <i class="fas fa-check-circle"></i> 
+                        已启用 <strong>${config.model_name}</strong> 模型
+                        <a href="/learner/dashboard" class="alert-link ms-2">
+                            <i class="fas fa-cog"></i> 配置
+                        </a>
+                    `);
+                } else {
+                    apiStatus.removeClass('alert-success').addClass('alert-info');
+                    apiStatusText.html(`
+                        <i class="fas fa-info-circle"></i> 
+                        使用默认回复模式
+                        <a href="/learner/dashboard" class="alert-link ms-2">
+                            <i class="fas fa-robot"></i> 配置API
+                        </a>
+                    `);
+                }
+            }
+        }
+    });
+}
 
 function addMessageToChat(sender, message) {
     const chatMessages = $('#chatMessages');
@@ -342,6 +384,19 @@ function logout() {
             }
         });
     }
+}
+
+// 加载聊天页面头像
+function loadChatAvatar() {
+    $.ajax({
+        url: '/api/avatar/get',
+        method: 'GET',
+        success: function(response) {
+            if (response.success && response.has_avatar) {
+                $('#chatAvatar').attr('src', response.avatar_url + '?' + Date.now());
+            }
+        }
+    });
 }
 
 // 添加自定义样式
