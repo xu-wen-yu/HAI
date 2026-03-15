@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>学习者仪表板 - HAI学伴</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        .dashboard-card {
+            border: none;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+        }
+        .dashboard-card:hover {
+            transform: translateY(-5px);
+        }
+        .progress-ring {
+            width: 120px;
+            height: 120px;
+        }
+        .progress-ring-circle {
+            stroke: #007bff;
+            stroke-width: 8;
+            fill: transparent;
+            stroke-dasharray: 339.292;
+            stroke-dashoffset: 339.292;
+            transition: stroke-dashoffset 0.5s ease;
+        }
+        .progress-ring-bg {
+            stroke: #e9ecef;
+            stroke-width: 8;
+            fill: transparent;
+        }
+        .goal-item {
+            border-left: 4px solid #28a745;
+            background-color: #f8f9fa;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 0 8px 8px 0;
+        }
+        .note-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 10px;
+        }
+        .study-stats {
+            background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+            border-radius: 15px;
+            padding: 20px;
+        }
+        .learner-avatar {
+            width: 80px;
+            height: 80px;
+            object-fit: cover;
+            border: 3px solid #e9ecef;
+        }
+    </style>
+</head>
+<body class="bg-light">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-mortarboard"></i> HAI学伴
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/chat">
+                    <i class="bi bi-chat-dots"></i> 智能对话
+                </a>
+                <a class="nav-link active" href="/learner/dashboard">
+                    <i class="bi bi-person"></i> 学习者中心
+                </a>
+                <button class="btn btn-outline-light btn-sm" onclick="logout()">
+                    <i class="bi bi-box-arrow-right"></i> 退出
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <!-- 左侧边栏 -->
+            <div class="col-md-3">
+                <div class="card dashboard-card mb-4">
+                    <div class="card-body text-center">
+                        <div class="mb-3">
+                            <img src="/head.png"
+                                 class="rounded-circle learner-avatar" alt="头像">
+                        </div>
+                        <h5 id="learnerName">学习者</h5>
+                        <div class="mb-2">
+                            <label class="form-label small text-muted mb-1" for="learnerGrade">年级</label>
+                            <select class="form-select form-select-sm" id="learnerGrade">
+                                <option value="">请选择年级</option>
+                                <option value="大一">大一</option>
+                                <option value="大二">大二</option>
+                                <option value="大三">大三</option>
+                                <option value="大四">大四</option>
+                                <option value="研一">研一</option>
+                                <option value="研二">研二</option>
+                            </select>
+                            <button class="btn btn-outline-primary btn-sm mt-2 w-100" onclick="saveGradeLevel()">
+                                <i class="bi bi-check2-circle"></i> 保存年级
+                            </button>
+                        </div>
+                        <div class="study-stats mt-3">
+                            <div class="row text-center">
+                                <div class="col-6">
+                                    <h4 id="totalStudyHours">0</h4>
+                                    <small>总学习时长</small>
+                                </div>
+                                <div class="col-6">
+                                    <h4 id="completedGoals">0</h4>
+                                    <small>完成目标</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 快速操作 -->
+                <div class="card dashboard-card">
+                    <div class="card-body">
+                        <h6 class="card-title">快速操作</h6>
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-outline-primary btn-sm" onclick="showAddGoalModal()">
+                                <i class="bi bi-target"></i> 添加目标
+                            </button>
+                            <button class="btn btn-outline-success btn-sm" onclick="showAddNoteModal()">
+                                <i class="bi bi-pencil"></i> 写笔记
+                            </button>
+                            <button class="btn btn-outline-info btn-sm" onclick="showUpdateProgressModal()">
+                                <i class="bi bi-graph-up"></i> 更新进度
+                            </button>
+                            <button class="btn btn-outline-warning btn-sm" onclick="showApiConfigModal()">
+                                <i class="bi bi-robot"></i> AI配置
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 主要内容区 -->
+            <div class="col-md-9">
+                <!-- 学习进度概览 -->
+                <div class="row mb-4">
+                    <div class="col-md-4">
+                        <div class="card dashboard-card text-center">
+                            <div class="card-body">
+                                <svg class="progress-ring" viewBox="0 0 120 120">
+                                    <circle class="progress-ring-bg" cx="60" cy="60" r="54"></circle>
+                                    <circle class="progress-ring-circle" cx="60" cy="60" r="54" 
+                                            id="overallProgressCircle"></circle>
+                                </svg>
+                                <h5 class="mt-3">总体进度</h5>
+                                <h3 id="overallProgressText">0%</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-8">
+                        <div class="card dashboard-card">
+                            <div class="card-body">
+                                <h5 class="card-title">学科进度</h5>
+                                <div id="subjectProgress">
+                                    <!-- 动态生成学科进度 -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 学习目标 -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="card dashboard-card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">
+                                    <i class="bi bi-target"></i> 学习目标
+                                </h5>
+                                <button class="btn btn-primary btn-sm" onclick="showAddGoalModal()">
+                                    <i class="bi bi-plus"></i> 添加目标
+                                </button>
+                            </div>
+                            <div class="card-body" id="learningGoals">
+                                <!-- 动态生成学习目标 -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 学习笔记 -->
+                <div class="row">
+                    <div class="col-12">
+                        <div class="card dashboard-card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">
+                                    <i class="bi bi-journal-text"></i> 学习笔记
+                                </h5>
+                                <button class="btn btn-success btn-sm" onclick="showAddNoteModal()">
+                                    <i class="bi bi-plus"></i> 写笔记
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <div class="row" id="studyNotes">
+                                    <!-- 动态生成学习笔记 -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加目标模态框 -->
+    <div class="modal fade" id="addGoalModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">添加学习目标</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addGoalForm">
+                        <div class="mb-3">
+                            <label class="form-label">目标标题</label>
+                            <input type="text" class="form-control" name="goal_title" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">目标描述</label>
+                            <textarea class="form-control" name="goal_description" rows="3"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">目标日期</label>
+                            <input type="date" class="form-control" name="target_date">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">优先级</label>
+                            <select class="form-select" name="priority">
+                                <option value="high">高</option>
+                                <option value="medium" selected>中</option>
+                                <option value="low">低</option>
+                            </select>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="addLearningGoal()">添加</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 添加笔记模态框 -->
+    <div class="modal fade" id="addNoteModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">添加学习笔记</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="addNoteForm">
+                        <div class="mb-3">
+                            <label class="form-label">笔记标题</label>
+                            <input type="text" class="form-control" name="title" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">学科</label>
+                            <input type="text" class="form-control" name="subject" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">内容</label>
+                            <textarea class="form-control" name="content" rows="5" required></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">标签（用逗号分隔）</label>
+                            <input type="text" class="form-control" name="tags" placeholder="例如: Python, 基础, 循环">
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="is_shared" id="is_shared">
+                                <label class="form-check-label" for="is_shared">
+                                    分享此笔记
+                                </label>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-success" onclick="addStudyNote()">保存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 更新进度模态框 -->
+    <div class="modal fade" id="updateProgressModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">更新学习进度</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="updateProgressForm">
+                        <div class="mb-3">
+                            <label class="form-label">学科</label>
+                            <input type="text" class="form-control" name="subject" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">主题/章节</label>
+                            <input type="text" class="form-control" name="topic" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">进度百分比</label>
+                            <input type="range" class="form-range" name="progress_percentage" min="0" max="100" value="50" 
+                                   oninput="this.nextElementSibling.textContent = this.value + '%'">
+                            <div class="text-center">50%</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">掌握程度</label>
+                            <select class="form-select" name="mastery_level">
+                                <option value="beginner">初学者</option>
+                                <option value="intermediate">中级</option>
+                                <option value="advanced">高级</option>
+                                <option value="expert">专家</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">学习时长（分钟）</label>
+                            <input type="number" class="form-control" name="study_time_minutes" value="30">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-info" onclick="updateLearningProgress()">更新</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI API配置模态框 -->
+    <div class="modal fade" id="apiConfigModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-robot"></i> AI API配置
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="apiConfigForm">
+                        <div class="alert alert-info" role="alert">
+                            <i class="bi bi-info-circle"></i> 配置您的AI API后，即可在智能对话中使用自己的AI模型。
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">API提供商</label>
+                            <select class="form-select" name="api_provider" id="apiProvider" onchange="updateProviderConfig()">
+                                <option value="openai">OpenAI</option>
+                                <option value="deepseek">DeepSeek</option>
+                                <option value="siliconflow">硅基流动</option>
+                                <option value="anthropic">Anthropic Claude</option>
+                                <option value="ollama">Ollama (本地)</option>
+                                <option value="custom">自定义（兼容OpenAI格式）</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">API Key</label>
+                            <input type="password" class="form-control" name="api_key" id="apiKey" 
+                                   placeholder="输入您的API Key">
+                            <small class="text-muted" id="apiKeyHint">留空表示不修改现有API Key</small>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Base URL</label>
+                            <input type="text" class="form-control" name="base_url" id="baseUrl" 
+                                   placeholder="例如: https://api.openai.com/v1">
+                            <small class="text-muted" id="baseUrlHint">API服务的基础地址</small>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">默认模型名称</label>
+                            <input type="text" class="form-control" name="default_model" id="defaultModel" 
+                                   placeholder="例如: gpt-3.5-turbo, deepseek-chat">
+                            <small class="text-muted">测试连接时使用的默认模型</small>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">可用模型</label>
+                            <select class="form-select" name="selected_model" id="selectedModel" disabled>
+                                <option value="">请先测试连接获取模型列表</option>
+                            </select>
+                            <small class="text-muted">点击"测试连接"后会自动获取可用模型</small>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="is_active" id="isActive">
+                                <label class="form-check-label" for="isActive">
+                                    启用此API配置
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="d-grid gap-2">
+                            <button type="button" class="btn btn-outline-primary" onclick="testApiConfig()">
+                                <i class="bi bi-check-circle"></i> 测试连接
+                            </button>
+                        </div>
+                        
+                        <div id="testResult" class="mt-3"></div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-warning" onclick="saveApiConfig()">
+                        <i class="bi bi-save"></i> 保存配置
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentLearnerProfile = null;
+
+        // 页面加载时获取数据
+        document.addEventListener('DOMContentLoaded', function() {
+            loadLearnerData();
+        });
+
+        // 加载学习者数据
+        async function loadLearnerData() {
+            try {
+                // 获取用户资料
+                const profileResponse = await fetch('/profile');
+                const profileData = await profileResponse.json();
+                
+                if (profileData.success) {
+                    updateProfileDisplay(profileData);
+                    loadAvatar();
+                    loadLearningGoals();
+                    loadStudyNotes();
+                    loadLearningProgress();
+                }
+            } catch (error) {
+                console.error('加载数据失败:', error);
+                alert('加载数据失败，请刷新页面重试');
+            }
+        }
+
+        // 加载用户头像
+        async function loadAvatar() {
+            try {
+                const response = await fetch('/api/avatar/get');
+                const data = await response.json();
+                
+                if (data.success && data.has_avatar) {
+                    document.getElementById('userAvatar').src = data.avatar_url + '?' + Date.now();
+                }
+            } catch (error) {
+                console.error('加载头像失败:', error);
+            }
+        }
+
+        // 上传头像
+        async function uploadAvatar(input) {
+            const file = input.files[0];
+            if (!file) return;
+            
+            // 验证文件类型
+            const allowedTypes = ['image/png', 'image/jpeg', 'image/gif'];
+            if (!allowedTypes.includes(file.type)) {
+                alert('只支持 PNG、JPG、JPEG、GIF 格式的图片');
+                return;
+            }
+            
+            // 验证文件大小（5MB）
+            if (file.size > 5 * 1024 * 1024) {
+                alert('图片大小不能超过 5MB');
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('avatar', file);
+            
+            try {
+                const response = await fetch('/upload/avatar', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    alert('头像上传成功！');
+                    loadAvatar();
+                } else {
+                    alert('上传失败: ' + result.message);
+                }
+            } catch (error) {
+                console.error('上传头像失败:', error);
+                alert('上传失败，请重试');
+            }
+        }
+
+        // 更新个人资料显示
+        function updateProfileDisplay(data) {
+            if (data.learner_profile) {
+                currentLearnerProfile = data.learner_profile;
+                document.getElementById('learnerName').textContent = data.learner_profile.full_name || '学习者';
+                document.getElementById('learnerGrade').value = data.learner_profile.grade_level || '';
+                document.getElementById('totalStudyHours').textContent = data.learner_profile.weekly_study_hours || 0;
+            }
+        }
+
+        // 保存年级
+        async function saveGradeLevel() {
+            const gradeLevel = document.getElementById('learnerGrade').value;
+            if (!gradeLevel) {
+                alert('请先选择年级');
+                return;
+            }
+
+            const profile = currentLearnerProfile || {};
+            const payload = {
+                full_name: profile.full_name || document.getElementById('learnerName').textContent || '学习者',
+                age: profile.age,
+                grade_level: gradeLevel,
+                learning_goals: profile.learning_goals || [],
+                preferred_subjects: profile.preferred_subjects || [],
+                learning_style: profile.learning_style || '',
+                weekly_study_hours: profile.weekly_study_hours || 0
+            };
+
+            try {
+                const response = await fetch('/learner/profile/update', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                if (result.success) {
+                    currentLearnerProfile = {
+                        ...profile,
+                        grade_level: gradeLevel
+                    };
+                    alert('年级更新成功！');
+                } else {
+                    alert('更新失败: ' + result.message);
+                }
+            } catch (error) {
+                console.error('更新年级失败:', error);
+                alert('更新失败，请重试');
+            }
+        }
+
+        // 加载学习目标
+        async function loadLearningGoals() {
+            // 这里需要从后端获取学习目标数据
+            // 暂时显示示例数据
+            const goalsHtml = `
+                <div class="goal-item">
+                    <h6>完成Python基础学习</h6>
+                    <p class="mb-2">掌握Python基本语法、数据类型和控制结构</p>
+                    <small class="text-muted">目标日期: 2024-02-01 | 状态: 进行中</small>
+                </div>
+                <div class="goal-item">
+                    <h6>机器学习入门</h6>
+                    <p class="mb-2">理解机器学习基本概念和常用算法</p>
+                    <small class="text-muted">目标日期: 2024-03-15 | 状态: 待开始</small>
+                </div>
+            `;
+            document.getElementById('learningGoals').innerHTML = goalsHtml;
+        }
+
+        // 加载学习笔记
+        async function loadStudyNotes() {
+            try {
+                const response = await fetch('/learner/notes/list');
+                const data = await response.json();
+                
+                if (data.success && data.notes.length > 0) {
+                    const notesHtml = data.notes.map(note => `
+                        <div class="col-md-6 mb-3">
+                            <div class="card note-card">
+                                <div class="card-body">
+                                    <h6>${note.title}</h6>
+                                    <p class="mb-2">${note.subject}</p>
+                                    <small>${note.created_at}</small>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('');
+                    document.getElementById('studyNotes').innerHTML = notesHtml;
+                } else {
+                    document.getElementById('studyNotes').innerHTML = `
+                        <div class="col-12 text-center text-muted">
+                            <p>还没有学习笔记，点击上方按钮添加第一条笔记吧！</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('加载笔记失败:', error);
+            }
+        }
+
+        // 加载学习进度
+        async function loadLearningProgress() {
+            // 这里需要从后端获取学习进度数据
+            // 暂时显示示例数据
+            const progressHtml = `
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between">
+                        <span>Python编程</span>
+                        <span>75%</span>
+                    </div>
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar" role="progressbar" style="width: 75%"></div>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between">
+                        <span>机器学习基础</span>
+                        <span>30%</span>
+                    </div>
+                    <div class="progress" style="height: 8px;">
+                        <div class="progress-bar bg-success" role="progressbar" style="width: 30%"></div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('subjectProgress').innerHTML = progressHtml;
+            
+            // 更新总体进度
+            updateOverallProgress(52); // 示例数据
+        }
+
+        // 更新总体进度显示
+        function updateOverallProgress(percentage) {
+            document.getElementById('overallProgressText').textContent = percentage + '%';
+            const circle = document.getElementById('overallProgressCircle');
+            const circumference = 2 * Math.PI * 54;
+            const offset = circumference - (percentage / 100) * circumference;
+            circle.style.strokeDashoffset = offset;
+        }
+
+        // 显示添加目标模态框
+        function showAddGoalModal() {
+            new bootstrap.Modal(document.getElementById('addGoalModal')).show();
+        }
+
+        // 显示添加笔记模态框
+        function showAddNoteModal() {
+            new bootstrap.Modal(document.getElementById('addNoteModal')).show();
+        }
+
+        // 显示更新进度模态框
+        function showUpdateProgressModal() {
+            new bootstrap.Modal(document.getElementById('updateProgressModal')).show();
+        }
+
+        // 显示API配置模态框
+        function showApiConfigModal() {
+            loadApiConfig();
+            new bootstrap.Modal(document.getElementById('apiConfigModal')).show();
+        }
+
+        // API提供商配置预设
+        const providerConfigs = {
+            openai: {
+                baseUrl: 'https://api.openai.com/v1',
+                defaultModel: 'gpt-3.5-turbo',
+                apiKeyHint: '从 https://platform.openai.com/api-keys 获取',
+                baseUrlHint: 'OpenAI官方API地址'
+            },
+            deepseek: {
+                baseUrl: 'https://api.deepseek.com/v1',
+                defaultModel: 'deepseek-chat',
+                apiKeyHint: '从 https://platform.deepseek.com 获取',
+                baseUrlHint: 'DeepSeek API地址'
+            },
+            siliconflow: {
+                baseUrl: 'https://api.siliconflow.cn/v1',
+                defaultModel: 'Qwen/Qwen2.5-7B-Instruct',
+                apiKeyHint: '从 https://cloud.siliconflow.cn 获取',
+                baseUrlHint: '硅基流动API地址'
+            },
+            anthropic: {
+                baseUrl: 'https://api.anthropic.com/v1',
+                defaultModel: 'claude-3-3-sonnet-20240229',
+                apiKeyHint: '从 https://console.anthropic.com 获取',
+                baseUrlHint: 'Anthropic API地址（需要使用OpenAI兼容接口'
+            },
+            ollama: {
+                baseUrl: 'http://localhost:11434/v1',
+                defaultModel: 'llama3.1',
+                apiKeyHint: 'Ollama本地运行，无需API Key',
+                baseUrlHint: 'Ollama本地API地址'
+            },
+            custom: {
+                baseUrl: '',
+                defaultModel: 'gpt-3.5-turbo',
+                apiKeyHint: '留空表示不修改现有API Key',
+                baseUrlHint: '请输入您的API服务地址'
+            }
+        };
+        
+        // 更新提供商配置
+        function updateProviderConfig() {
+            const provider = document.getElementById('apiProvider').value;
+            const config = providerConfigs[provider];
+            
+            if (config) {
+                document.getElementById('baseUrl').value = config.baseUrl;
+                document.getElementById('defaultModel').value = config.defaultModel;
+                document.getElementById('apiKeyHint').textContent = config.apiKeyHint;
+                document.getElementById('baseUrlHint').textContent = config.baseUrlHint;
+            }
+        }
+        
+        // 加载API配置
+        async function loadApiConfig() {
+            try {
+                const response = await fetch('/api/config/get');
+                const data = await response.json();
+                
+                if (data.success) {
+                    const config = data.config;
+                    document.getElementById('apiProvider').value = config.api_provider;
+                    document.getElementById('apiKey').value = '';
+                    document.getElementById('baseUrl').value = config.base_url || '';
+                    document.getElementById('isActive').checked = config.is_active;
+                    
+                    // 更新可用模型下拉框
+                    updateModelSelector(config.available_models || [], config.selected_model || '');
+                }
+            } catch (error) {
+                console.error('加载API配置失败:', error);
+            }
+        }
+        
+        // 更新模型选择器
+        function updateModelSelector(models, selectedModel) {
+            const select = document.getElementById('selectedModel');
+            select.innerHTML = '';
+            
+            if (models.length === 0) {
+                select.innerHTML = '<option value="">请先测试连接获取模型列表</option>';
+                select.disabled = true;
+            } else {
+                models.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model;
+                    option.textContent = model;
+                    if (model === selectedModel) {
+                        option.selected = true;
+                    }
+                    select.appendChild(option);
+                });
+                select.disabled = false;
+            }
+        }
+
+        // 保存API配置
+        async function saveApiConfig() {
+            const form = document.getElementById('apiConfigForm');
+            const formData = new FormData(form);
+            
+            // 获取当前可用模型列表
+            const currentModels = [];
+            const select = document.getElementById('selectedModel');
+            for (let i = 0; i < select.options.length; i++) {
+                if (select.options[i].value) {
+                    currentModels.push(select.options[i].value);
+                }
+            }
+            
+            const data = {
+                api_provider: formData.get('api_provider'),
+                api_key: formData.get('api_key'),
+                base_url: formData.get('base_url'),
+                model_name: formData.get('selected_model') || 'gpt-3.5-turbo',
+                selected_model: formData.get('selected_model') || 'gpt-3.5-turbo',
+                available_models: currentModels,
+                is_active: formData.get('is_active') === 'on'
+            };
+
+            try {
+                const response = await fetch('/api/config/save', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    alert('API配置保存成功！');
+                    bootstrap.Modal.getInstance(document.getElementById('apiConfigModal')).hide();
+                } else {
+                    alert('保存失败: ' + result.message);
+                }
+            } catch (error) {
+                console.error('保存API配置失败:', error);
+                alert('保存失败，请重试');
+            }
+        }
+
+        // 测试API配置
+        async function testApiConfig() {
+            const form = document.getElementById('apiConfigForm');
+            const formData = new FormData(form);
+            const provider = document.getElementById('apiProvider').value;
+            const data = {
+                api_key: formData.get('api_key'),
+                base_url: formData.get('base_url'),
+                model_name: document.getElementById('defaultModel').value || 'gpt-3.5-turbo'
+            };
+
+            // 对于Ollama，API Key可以为空
+            if (provider === 'ollama') {
+                if (!data.api_key) {
+                    data.api_key = 'ollama'; // Ollama可以使用任意非空字符串作为API Key
+                }
+            } else {
+                // 对于其他提供商，如果没有输入新的API key，先获取已保存的配置
+                if (!data.api_key) {
+                    try {
+                        const getResponse = await fetch('/api/config/get');
+                        const getResult = await getResponse.json();
+                        if (getResult.success && getResult.config.api_key) {
+                            data.api_key = getResult.config.api_key;
+                            data.base_url = getResult.config.base_url || '';
+                        } else {
+                            alert('请先在输入框中填写API Key');
+                            return;
+                        }
+                    } catch (e) {
+                        alert('请先在输入框中填写API Key');
+                        return;
+                    }
+                }
+            }
+
+            const testResultDiv = document.getElementById('testResult');
+            testResultDiv.innerHTML = '<div class="alert alert-info"><i class="bi bi-hourglass-split"></i> 正在测试连接...</div>';
+
+            try {
+                const response = await fetch('/api/config/test', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    testResultDiv.innerHTML = `
+                        <div class="alert alert-success">
+                            <i class="bi bi-check-circle-fill"></i> ${result.message}
+                        </div>
+                    `;
+                    
+                    // 更新模型选择器
+                    if (result.available_models && result.available_models.length > 0) {
+                        updateModelSelector(result.available_models, result.available_models[0]);
+                    }
+                } else {
+                    testResultDiv.innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="bi bi-x-circle-fill"></i> ${result.message}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('测试API配置失败:', error);
+                testResultDiv.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="bi bi-x-circle-fill"></i> 测试失败，请重试
+                    </div>
+                `;
+            }
+        }
+
+        // 添加学习目标
+        async function addLearningGoal() {
+            const form = document.getElementById('addGoalForm');
+            const formData = new FormData(form);
+            const data = {
+                goal_title: formData.get('goal_title'),
+                goal_description: formData.get('goal_description'),
+                target_date: formData.get('target_date'),
+                priority: formData.get('priority')
+            };
+
+            try {
+                const response = await fetch('/learner/goals/add', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    alert('学习目标添加成功！');
+                    bootstrap.Modal.getInstance(document.getElementById('addGoalModal')).hide();
+                    form.reset();
+                    loadLearningGoals();
+                } else {
+                    alert('添加失败: ' + result.message);
+                }
+            } catch (error) {
+                console.error('添加目标失败:', error);
+                alert('添加失败，请重试');
+            }
+        }
+
+        // 添加学习笔记
+        async function addStudyNote() {
+            const form = document.getElementById('addNoteForm');
+            const formData = new FormData(form);
+            const data = {
+                title: formData.get('title'),
+                subject: formData.get('subject'),
+                content: formData.get('content'),
+                tags: formData.get('tags').split(',').map(tag => tag.trim()).filter(tag => tag),
+                is_shared: formData.get('is_shared') === 'on'
+            };
+
+            try {
+                const response = await fetch('/learner/notes/add', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    alert('学习笔记添加成功！');
+                    bootstrap.Modal.getInstance(document.getElementById('addNoteModal')).hide();
+                    form.reset();
+                    loadStudyNotes();
+                } else {
+                    alert('添加失败: ' + result.message);
+                }
+            } catch (error) {
+                console.error('添加笔记失败:', error);
+                alert('添加失败，请重试');
+            }
+        }
+
+        // 更新学习进度
+        async function updateLearningProgress() {
+            const form = document.getElementById('updateProgressForm');
+            const formData = new FormData(form);
+            const data = {
+                subject: formData.get('subject'),
+                topic: formData.get('topic'),
+                progress_percentage: parseInt(formData.get('progress_percentage')),
+                mastery_level: formData.get('mastery_level'),
+                study_time_minutes: parseInt(formData.get('study_time_minutes'))
+            };
+
+            try {
+                const response = await fetch('/learner/progress/update', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    alert('学习进度更新成功！');
+                    bootstrap.Modal.getInstance(document.getElementById('updateProgressModal')).hide();
+                    form.reset();
+                    loadLearningProgress();
+                } else {
+                    alert('更新失败: ' + result.message);
+                }
+            } catch (error) {
+                console.error('更新进度失败:', error);
+                alert('更新失败，请重试');
+            }
+        }
+
+        // 退出登录
+        async function logout() {
+            if (confirm('确定要退出登录吗？')) {
+                try {
+                    const response = await fetch('/logout');
+                    const result = await response.json();
+                    if (result.success) {
+                        window.location.href = '/';
+                    }
+                } catch (error) {
+                    console.error('退出失败:', error);
+                }
+            }
+        }
+    </script>
+</body>
+</html>

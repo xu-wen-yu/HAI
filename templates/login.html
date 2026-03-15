@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+
+{% block title %}登录 - HAI学伴{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+        <div class="card">
+            <div class="card-body p-5">
+                <div class="text-center mb-4">
+                    <i class="fas fa-robot fa-3x text-primary mb-3"></i>
+                    <h3>欢迎回到HAI学伴</h3>
+                    <p class="text-muted">开始你的智能学习之旅</p>
+                </div>
+                
+                <!-- 登录表单 -->
+                <form id="loginForm">
+                    <div class="mb-3">
+                        <label for="username" class="form-label">
+                            <i class="fas fa-user"></i> 用户名
+                        </label>
+                        <input type="text" class="form-control" id="username" required>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label for="password" class="form-label">
+                            <i class="fas fa-lock"></i> 密码
+                        </label>
+                        <input type="password" class="form-control" id="password" required>
+                    </div>
+                    
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary btn-lg">
+                            <i class="fas fa-sign-in-alt"></i> 登录
+                        </button>
+                    </div>
+                </form>
+                
+                <hr class="my-4">
+                
+                <!-- 注册表单 -->
+                <div class="text-center">
+                    <p class="text-muted mb-3">还没有账号？立即注册</p>
+                    <form id="registerForm">
+                        <div class="mb-3">
+                            <input type="text" class="form-control" id="regUsername" placeholder="用户名" required>
+                        </div>
+                        <div class="mb-3">
+                            <input type="password" class="form-control" id="regPassword" placeholder="密码" required>
+                        </div>
+                        <div class="mb-3">
+                            <select class="form-select" id="regUserType">
+                                <option value="free">免费学伴（积累功德积分）</option>
+                                <option value="paid">付费学伴（专业服务）</option>
+                                <option value="learner">学习者账户（个性化学习）</option>
+                            </select>
+                        </div>
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-success">
+                                <i class="fas fa-user-plus"></i> 注册新账号
+                            </button>
+                        </div>
+                    </form>
+                </div>
+                
+                <!-- 匿名体验 -->
+                <div class="text-center mt-4">
+                    <button class="btn btn-outline-primary" id="anonymousBtn">
+                        <i class="fas fa-mask"></i> 匿名体验
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 功能介绍 -->
+        <div class="card mt-4">
+            <div class="card-body">
+                <h5 class="card-title"><i class="fas fa-info-circle"></i> HAI学伴特色功能</h5>
+                <div class="row">
+                    <div class="col-6">
+                        <div class="text-center p-3">
+                            <i class="fas fa-graduation-cap fa-2x text-primary mb-2"></i>
+                            <h6>智能答疑</h6>
+                            <small class="text-muted">专业问题即时解答</small>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="text-center p-3">
+                            <i class="fas fa-user-secret fa-2x text-success mb-2"></i>
+                            <h6>完全匿名</h6>
+                            <small class="text-muted">保护隐私，专注学习</small>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="text-center p-3">
+                            <i class="fas fa-heart fa-2x text-warning mb-2"></i>
+                            <h6>功德积分</h6>
+                            <small class="text-muted">助人为乐，积累功德</small>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="text-center p-3">
+                            <i class="fas fa-crown fa-2x text-danger mb-2"></i>
+                            <h6>付费专业</h6>
+                            <small class="text-muted">更深入的个性化服务</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 消息提示模态框 -->
+<div class="modal fade" id="messageModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="messageModalTitle">提示</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="messageModalBody">
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    // 登录处理
+    $('#loginForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        const loginData = {
+            username: $('#username').val(),
+            password: $('#password').val()
+        };
+        
+        $.ajax({
+            url: '/login',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(loginData),
+            success: function(response) {
+                if (response.success) {
+                    window.location.href = '/';
+                } else {
+                    showMessage('登录失败', response.message || '用户名或密码错误');
+                }
+            },
+            error: function() {
+                showMessage('错误', '登录请求失败，请重试');
+            }
+        });
+    });
+    
+    // 注册处理
+    $('#registerForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        const registerData = {
+            username: $('#regUsername').val(),
+            password: $('#regPassword').val(),
+            user_type: $('#regUserType').val()
+        };
+        
+        $.ajax({
+            url: '/register',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(registerData),
+            success: function(response) {
+                if (response.success) {
+                    showMessage('注册成功', '账号创建成功，请登录');
+                    // 清空注册表单
+                    $('#regUsername').val('');
+                    $('#regPassword').val('');
+                } else {
+                    showMessage('注册失败', response.message || '注册失败，请重试');
+                }
+            },
+            error: function() {
+                showMessage('错误', '注册请求失败，请重试');
+            }
+        });
+    });
+    
+    // 匿名体验
+    $('#anonymousBtn').on('click', function() {
+        const timestamp = Date.now();
+        const anonymousUsername = 'anonymous_' + timestamp;
+        
+        $.ajax({
+            url: '/register',
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                username: anonymousUsername,
+                password: 'anonymous',
+                user_type: 'free'
+            }),
+            success: function(response) {
+                if (response.success) {
+                    // 自动登录（使用相同的用户名）
+                    $.ajax({
+                        url: '/login',
+                        method: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify({
+                            username: anonymousUsername,
+                            password: 'anonymous'
+                        }),
+                        success: function(loginResponse) {
+                            if (loginResponse.success) {
+                                window.location.href = '/';
+                            } else {
+                                showMessage('登录失败', loginResponse.message || '匿名登录失败');
+                            }
+                        },
+                        error: function() {
+                            showMessage('错误', '登录请求失败，请重试');
+                        }
+                    });
+                } else {
+                    showMessage('注册失败', response.message || '匿名体验注册失败');
+                }
+            },
+            error: function() {
+                showMessage('错误', '匿名体验请求失败，请重试');
+            }
+        });
+    });
+    
+    function showMessage(title, message) {
+        $('#messageModalTitle').text(title);
+        $('#messageModalBody').text(message);
+        const modal = new bootstrap.Modal(document.getElementById('messageModal'));
+        modal.show();
+    }
+});
+</script>
+{% endblock %}
